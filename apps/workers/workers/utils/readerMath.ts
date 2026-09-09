@@ -24,6 +24,10 @@ export function sanitizeReadableContent(html: string): string {
  * cached reader content needs neither scripts nor a client-side DOM rewrite.
  */
 export function renderReaderMath(root: ParentNode): void {
+  // Keep the parser's synchronous work bounded across the whole article,
+  // including failed conversions. Excess formulas retain their source text.
+  let remainingEquations = 256;
+  let remainingSourceCharacters = 50_000;
   for (const element of root.querySelectorAll("d-math")) {
     if (element.closest("pre, code, math")) {
       continue;
@@ -38,10 +42,17 @@ export function renderReaderMath(root: ParentNode): void {
     }
 
     const source = element.textContent ?? "";
-    if (!source.trim() || source.length > 10_000) {
+    if (
+      !source.trim() ||
+      source.length > 10_000 ||
+      remainingEquations === 0 ||
+      source.length > remainingSourceCharacters
+    ) {
       continue;
     }
 
+    remainingEquations--;
+    remainingSourceCharacters -= source.length;
     try {
       const template = element.ownerDocument.createElement("template");
       template.innerHTML = renderToString(source, {

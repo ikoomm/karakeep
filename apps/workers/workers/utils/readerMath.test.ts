@@ -30,7 +30,7 @@ describe("reader math", () => {
       inspect(readable!.content!, (document) => {
         expect(document.querySelectorAll("math")).toHaveLength(2);
         expect(document.querySelector("msubsup > mi")?.textContent).toBe("W");
-        expect(document.querySelector("msubsup")?.textContent).toBe("Wencℓ");
+        expect(document.querySelector("msubsup")?.textContent).toBe("Wencâ„“");
         expect(
           document.querySelector("d-math, script, .katex-html"),
         ).toBeNull();
@@ -136,6 +136,34 @@ describe("reader math", () => {
         expect(document.querySelector("script, [onclick], [href]")).toBeNull();
         expect(document.body.textContent).toContain("Before");
         expect(document.querySelector("math mi")?.textContent).toBe("y");
+      },
+    );
+  });
+
+  it("limits conversion attempts across the article, including failures", () => {
+    // Failed parses consume the same call budget as successful conversions.
+    const invalid = String.raw`<d-math>\unknowncommand{x}</d-math>`;
+    const html = invalid.repeat(255) + "<d-math>x</d-math><d-math>y</d-math>";
+    inspect(html, (document) => {
+      expect(document.querySelectorAll("math")).toHaveLength(1);
+      expect(document.querySelector("math mi")?.textContent).toBe("x");
+      expect(document.body.textContent?.endsWith("y")).toBe(true);
+      expect(document.body.textContent).toContain(
+        String.raw`\unknowncommand{x}`,
+      );
+    });
+    const once = sanitizeReadableContent(html);
+    expect(sanitizeReadableContent(once)).toBe(once);
+  });
+
+  it("limits total source size without losing equations or following text", () => {
+    const formula = "x".padEnd(10_000, " ");
+    inspect(
+      `<d-math>${formula}</d-math>`.repeat(5) +
+        "<d-math>y</d-math><p>After</p>",
+      (document) => {
+        expect(document.querySelectorAll("math")).toHaveLength(5);
+        expect(document.body.textContent?.endsWith("yAfter")).toBe(true);
       },
     );
   });
